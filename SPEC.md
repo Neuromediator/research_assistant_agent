@@ -118,9 +118,9 @@ START
 | LLM provider    | Anthropic (Claude Sonnet 4.6 + Haiku 4.5)             |
 | Web search      | Serper (Google)                                       |
 | Article fetch   | `trafilatura`                                         |
-| UI              | Gradio                                                |
+| UI              | Gradio 6.x                                            |
 | Deployment      | Hugging Face Spaces (public, free CPU)                |
-| Observability   | CrewAI `verbose=True` + Langfuse (free tier)          |
+| Observability   | CrewAI `verbose=True` + Langfuse 4.x (free tier)      |
 | Cache           | SQLite (file-based, in `./.cache/`)                   |
 | Tests           | pytest, with mocked Anthropic + mocked Serper         |
 | Lint/format     | ruff (single tool: `ruff check` + `ruff format`)      |
@@ -280,7 +280,7 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 ## 10. Observability
 
 - **CrewAI `verbose=True`** — agent thoughts and tool calls printed to stdout (HF Spaces logs)
-- **Langfuse free tier** — distributed tracing UI; one span per agent run, nested tool calls, token + cost tracking. Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`).
+- **Langfuse free tier (v4.x)** — distributed tracing UI; one span per agent run, nested tool calls, token + cost tracking. Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`). Langfuse v3+ moved from a manual-span SDK to OpenTelemetry-based instrumentation (`@observe` decorator + OTel exporter); the exact wiring with CrewAI is settled in Step 10 of §13 — when consulting docs, ignore v2 examples.
 - **Per-run cost summary** — printed at end of each run (sum across agents, from CrewAI's usage_metrics)
 
 ---
