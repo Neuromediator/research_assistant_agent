@@ -1,20 +1,26 @@
 [project]
 name = "research_assistant_agent"
 version = "0.1.0"
-description = "research_assistant_agent using crewAI"
-authors = [{ name = "Your Name", email = "you@example.com" }]
+description = "Web research agent that produces cited markdown reports — built with CrewAI"
+authors = [{ name = "Sergei Maslennikov", email = "sergeimaslennikov89@gmail.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "crewai[tools]==1.14.4"
+    "crewai[tools]==1.14.4",
+    "trafilatura>=2.0",
+    "gradio>=5.0",
+    "langfuse>=2.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
 research_assistant_agent = "research_assistant_agent.main:run"
 run_crew = "research_assistant_agent.main:run"
-train = "research_assistant_agent.main:train"
-replay = "research_assistant_agent.main:replay"
-test = "research_assistant_agent.main:test"
-run_with_trigger = "research_assistant_agent.main:run_with_trigger"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.7",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,3 +28,13 @@ build-backend = "hatchling.build"
 
 [tool.crewai]
 type = "crew"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"

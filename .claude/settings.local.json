@@ -3,7 +3,10 @@
     "allow": [
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git -c user.email=sergeimaslennikov89@gmail.com -c user.name=\"Sergei Maslennikov\" commit -q -m \"Import CrewAI template baseline\")"
+      "Bash(git -c user.email=sergeimaslennikov89@gmail.com -c user.name=\"Sergei Maslennikov\" commit -q -m \"Import CrewAI template baseline\")",
+      "Bash(uv sync *)",
+      "Bash(uv run *)",
+      "Bash(git -c user.email=sergeimaslennikov89@gmail.com -c 'user.name=Sergei Maslennikov' commit -q -m 'Clean up template; configure deps and ruff for research agent *)"
     ]
   }
 }
