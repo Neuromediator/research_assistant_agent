@@ -3407,6 +3407,7 @@ dependencies = [
     { name = "gradio" },
     { name = "langfuse" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "trafilatura" },
 ]
 
@@ -3422,6 +3423,7 @@ requires-dist = [
     { name = "gradio", specifier = ">=5.0" },
     { name = "langfuse", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "trafilatura", specifier = ">=2.0" },
 ]
 
