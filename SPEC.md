@@ -83,7 +83,8 @@ START
 - Output: clean main-article markdown text + metadata (title, byline, published date if available)
 - Backed by [`trafilatura`](https://trafilatura.readthedocs.io/) for main-content extraction (strips nav, ads, comments)
 - Local SQLite cache (`./.cache/articles.db`) keyed on URL — saves re-fetches during dev iteration and on retries within the same session
-- Failure modes: dead URL → return `{"error": "fetch_failed", "url": ...}` so the searcher can drop and move on
+- Failure modes: dead URL or unparseable page → return a string starting with `ERROR:` (e.g., `ERROR: Could not fetch <url> (request failed: Timeout)`). The searcher's prompt is told to drop any URL whose extractor output begins with `ERROR:` and try the next one. Why a string prefix instead of a dict? CrewAI tools must return strings — the output is fed verbatim into the LLM context, so an in-band sentinel is the simplest control signal and avoids JSON parsing inside the prompt.
+- Failures are NOT cached — only successful fetches are written to SQLite. A transient DNS/timeout error must not poison a retry within the same session (the verifier loop in §2.2 may re-issue the same URL).
 - Timeout: 15s per fetch
 - User-Agent: identifying the project (politeness)
 
