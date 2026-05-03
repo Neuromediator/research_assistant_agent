@@ -120,7 +120,7 @@ class ResearchFlow(Flow[ResearchState]):
                 "subtopic_count": profile["subtopic_count"],
             }
         )
-        self.state.subtopics = _expect_pydantic(result.pydantic, Subtopics, result.raw)
+        self.state.subtopics = expect_pydantic(result.pydantic, Subtopics, result.raw)
 
     @listen(plan)
     def search(self) -> None:
@@ -129,13 +129,13 @@ class ResearchFlow(Flow[ResearchState]):
         profile = DEPTH_PROFILE[self.state.depth]
         result = self._factory.search_crew().kickoff(
             inputs={
-                "search_brief": _format_initial_brief(self.state.subtopics),
+                "search_brief": format_initial_brief(self.state.subtopics),
                 "sources_per_subtopic": profile["sources_per_subtopic"],
                 "total_sources_min": profile["total_min"],
                 "total_sources_max": profile["total_max"],
             }
         )
-        self.state.findings = _expect_pydantic(result.pydantic, Findings, result.raw)
+        self.state.findings = expect_pydantic(result.pydantic, Findings, result.raw)
 
     @listen(search)
     def critique(self) -> None:
@@ -149,7 +149,7 @@ class ResearchFlow(Flow[ResearchState]):
                 "findings_json": self.state.findings.model_dump_json(),
             }
         )
-        self.state.critique = _expect_pydantic(result.pydantic, CritiqueResult, result.raw)
+        self.state.critique = expect_pydantic(result.pydantic, CritiqueResult, result.raw)
 
     @router(critique)
     def critique_decision(self) -> str:
@@ -185,13 +185,13 @@ class ResearchFlow(Flow[ResearchState]):
         profile = DEPTH_PROFILE[self.state.depth]
         result = self._factory.search_crew().kickoff(
             inputs={
-                "search_brief": _format_retry_brief(self.state.critique),
+                "search_brief": format_retry_brief(self.state.critique),
                 "sources_per_subtopic": profile["sources_per_subtopic"],
                 "total_sources_min": profile["total_min"],
                 "total_sources_max": profile["total_max"],
             }
         )
-        new = _expect_pydantic(result.pydantic, Findings, result.raw)
+        new = expect_pydantic(result.pydantic, Findings, result.raw)
         self.state.findings = Findings(items=[*self.state.findings.items, *new.items])
         self.state.retries_used += 1
 
@@ -213,18 +213,18 @@ class ResearchFlow(Flow[ResearchState]):
                 "today": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
             }
         )
-        self.state.report = _expect_pydantic(result.pydantic, Report, result.raw)
+        self.state.report = expect_pydantic(result.pydantic, Report, result.raw)
         return self.state.report
 
 
 # ---- Helpers ------------------------------------------------------------
 
 
-def _format_initial_brief(subtopics: Subtopics) -> str:
+def format_initial_brief(subtopics: Subtopics) -> str:
     return "\n".join(f"- {s.question} (rationale: {s.rationale})" for s in subtopics.items)
 
 
-def _format_retry_brief(critique: CritiqueResult) -> str:
+def format_retry_brief(critique: CritiqueResult) -> str:
     lines = ["The previous research had these gaps. Address each one:"]
     for c in critique.missing_claims:
         lines.append(f"- MISSING: {c}")
@@ -236,7 +236,7 @@ def _format_retry_brief(critique: CritiqueResult) -> str:
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _expect_pydantic(value: BaseModel | None, expected: type[_T], raw: str) -> _T:
+def expect_pydantic(value: BaseModel | None, expected: type[_T], raw: str) -> _T:
     """Assert the crew returned a parsed Pydantic instance of the expected type.
 
     `result.pydantic` is None when the LLM emitted output that didn't match
