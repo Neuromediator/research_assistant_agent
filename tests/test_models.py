@@ -48,13 +48,13 @@ class TestFinding:
             fetched_at=datetime.now(),
         )
 
-    def test_excerpt_at_500_chars_accepted(self) -> None:
+    def test_excerpt_at_800_chars_accepted(self) -> None:
         # Exactly at the limit — must not raise.
-        self._build("x" * 500)
+        self._build("x" * 800)
 
-    def test_excerpt_over_500_rejected(self) -> None:
+    def test_excerpt_over_800_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            self._build("x" * 501)
+            self._build("x" * 801)
 
 
 class TestCritiqueResult:

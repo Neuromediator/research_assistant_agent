@@ -67,8 +67,8 @@ class Finding(BaseModel):
     source_title: str
     excerpt: str = Field(
         ...,
-        max_length=500,
-        description="≤500 chars from the source that supports the claim.",
+        max_length=800,
+        description="≤800 chars from the source that supports the claim.",
     )
     fetched_at: datetime
 

@@ -48,7 +48,7 @@ search_sources:
          drop that URL and try the next search result.
       3. From each successful fetch, extract one or more specific factual
          claims that the source genuinely supports. For each claim, capture
-         an excerpt of ≤500 characters from the article that a reader could
+         an excerpt of ≤800 characters from the article that a reader could
          check against the claim.
 
     Stay within the topic. If a source is off-topic, skip it. If a fetched
@@ -64,7 +64,7 @@ search_sources:
       - "claim": one factual statement (string)
       - "source_url": the URL the claim is from (string)
       - "source_title": the title of the source page (string)
-      - "excerpt": ≤500-character passage from the article that supports
+      - "excerpt": ≤800-character passage from the article that supports
         the claim (string)
       - "fetched_at": ISO-8601 timestamp of when you fetched it (string)
   agent: searcher
