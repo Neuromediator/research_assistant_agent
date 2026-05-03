@@ -14,8 +14,15 @@ from __future__ import annotations
 import sys
 from typing import cast
 
+from dotenv import load_dotenv
+
 from research_assistant_agent.flow import ResearchFlow
 from research_assistant_agent.models import Depth, ResearchInput
+
+# Load .env so ANTHROPIC_API_KEY / SERPER_API_KEY are visible to the SDKs
+# before we instantiate the Flow. On HF Spaces there is no `.env` file —
+# secrets arrive as real env vars — so this call is a no-op there.
+load_dotenv()
 
 
 def run() -> None:
