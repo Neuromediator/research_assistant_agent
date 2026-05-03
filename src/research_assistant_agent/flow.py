@@ -22,11 +22,11 @@ WIRING DIAGRAM (matches SPEC §2.2):
                                               │
                                        @router decide
                                               │
-                            ┌─ "write" ───────┘
+                            ┌─ "go_write" ────┘
                             │                 │
-                            │       └─ "retry_search" ─► retry_search
-                            │                                 │
-                            └──── @listen(or_("write", retry_search)) ─► write
+                            │       └─ "go_retry" ─► retry_search
+                            │                              │
+                            └─ @listen(or_("go_write", retry_search)) ─► write
 """
 
 from __future__ import annotations
@@ -156,15 +156,23 @@ class ResearchFlow(Flow[ResearchState]):
         """Pick a branch based on the critic's verdict.
 
         Two outcomes — both string labels picked up by `@listen` below:
-          - "write"        : findings are good, OR the retry budget is spent
-          - "retry_search" : critic flagged gaps and we still have a retry
+          - "go_write" : findings are good, OR the retry budget is spent
+          - "go_retry" : critic flagged gaps and we still have a retry
+
+        WHY the labels are prefixed `go_` instead of plain "write" / "retry":
+        a Flow method's own name is also an implicit label (each method
+        emits its name on completion). If a router label collides with a
+        downstream method name, that method's own completion can re-trigger
+        it through any `@listen` it has on that label — an infinite loop.
+        Prefixed labels make the router's emissions unambiguous and keep
+        the loop detector quiet.
         """
         assert self.state.critique is not None
         if self.state.critique.ok or self.state.retries_used >= MAX_RETRIES:
-            return "write"
-        return "retry_search"
+            return "go_write"
+        return "go_retry"
 
-    @listen("retry_search")
+    @listen("go_retry")
     def retry_search(self) -> None:
         """Stage 2b — scoped re-search to address the critic's gaps.
 
@@ -187,11 +195,11 @@ class ResearchFlow(Flow[ResearchState]):
         self.state.findings = Findings(items=[*self.state.findings.items, *new.items])
         self.state.retries_used += 1
 
-    @listen(or_("write", retry_search))
+    @listen(or_("go_write", retry_search))
     def write(self) -> Report:
         """Stage 4 (terminal) — writer composes the final markdown report.
 
-        Listens on BOTH branches: the router's "write" label (no retry
+        Listens on BOTH branches: the router's "go_write" label (no retry
         needed) AND the completion of `retry_search` (after the one
         permitted retry). Either way, write fires exactly once because
         only one branch executes per Flow run.
