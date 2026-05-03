@@ -105,9 +105,15 @@ START
 
 ### 2.5 Outputs
 
-- **Gradio UI:** rendered markdown + a "Download report" button
+- **Gradio UI:**
+  - Per-stage status line (e.g. "🔎 Searching the web for 3 subtopics…") + Gradio progress bar — updated between Flow stages.
+  - Rendered markdown report once the writer finishes.
+  - "Download .md" button (hidden until the report is ready).
+  - **Stop** button — soft cancel: interrupts the run at the next stage boundary. An LLM call already in flight still completes (and bills) — the Anthropic SDK doesn't expose mid-call cancellation. Resets status to "🛑 Research stopped. Try again." and clears report/download.
 - **Disk:** `outputs/{ISO-timestamp}_{slug}.md`
 - **Report format:** see [Appendix A](#appendix-a--report-format)
+
+> **Implementation note.** The UI's click handler is a generator that walks the same 4 stages as `ResearchFlow` by hand (plan → search → critique → [retry] → write), `yield`-ing between them so Gradio can update the progress bar and honour the Stop button's `cancels=` wiring. `ResearchFlow` itself remains the source of truth for orchestration semantics and is what the CLI / `crewai run` path uses; the duplication is the price of cooperating with Gradio's progress + cancel primitives, which can't observe the inside of a monolithic `flow.kickoff()` call.
 
 ---
 
@@ -280,9 +286,9 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 
 ## 10. Observability
 
-- **CrewAI `verbose=True`** — agent thoughts and tool calls printed to stdout (HF Spaces logs)
-- **Langfuse free tier (v4.x)** — distributed tracing UI; one span per agent run, nested tool calls, token + cost tracking. Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`). Langfuse v3+ moved from a manual-span SDK to OpenTelemetry-based instrumentation (`@observe` decorator + OTel exporter); the exact wiring with CrewAI is settled in Step 10 of §13 — when consulting docs, ignore v2 examples.
-- **Per-run cost summary** — printed at end of each run (sum across agents, from CrewAI's usage_metrics)
+- **CrewAI `verbose=True`** — agent thoughts and tool calls printed to stdout (HF Spaces logs). **Active.**
+- **Langfuse free tier (v4.x)** — distributed tracing UI; one span per agent run, nested tool calls, token + cost tracking. Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`). Langfuse v3+ moved from a manual-span SDK to OpenTelemetry-based instrumentation (`@observe` decorator + OTel exporter); when consulting docs, ignore v2 examples. **Status: deferred — declared as a dependency in `pyproject.toml` but not yet wired in. See §13 step 12.**
+- **Per-run cost summary** — printed at end of each run (sum across agents, from CrewAI's usage_metrics). **Deferred (paired with Langfuse step).**
 
 ---
 
@@ -319,8 +325,9 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 9. Local end-to-end sanity run
 10. Set up `.github/workflows/ci.yml`
 11. Push to GitHub
-12. Create HF Space, set up Secrets, set up `deploy.yml`
-13. Push to `main` → live demo
+12. Wire Langfuse tracing (`@observe` on the Flow + per-stage spans; verify a trace lands in cloud.langfuse.com on a local run before pushing). Deferred behind GitHub push so the repo can ship without observability if Langfuse onboarding stalls.
+13. Create HF Space, set up Secrets (Anthropic, Serper, Langfuse), set up `deploy.yml`
+14. Push to `main` → live demo
 
 ---
 
