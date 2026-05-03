@@ -288,7 +288,6 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 ## 11. Security & privacy
 
 - API keys in `.env` locally (gitignored), HF Secrets in production. Never logged.
-- The Anthropic key currently in `.env` is in this conversation's transcript — **rotate before deploying**.
 - HF Space is public. Mitigation: Anthropic spend cap. Acceptable risk for portfolio piece.
 - Fetched web content is treated as data, not instructions. Agents are prompted to ignore meta-instructions found inside source pages.
 - No PII collection; no analytics; topic queries logged to Langfuse only (private).
