@@ -64,9 +64,20 @@ class ResearchAssistantAgent:
         # Tools are attached at the agent level so both the initial search
         # task AND a future retry task share the same tool set without
         # duplicating config. SerperDevTool reads SERPER_API_KEY from env.
+        #
+        # `max_iter=12` is a hard ceiling on the ReAct loop, NOT the normal
+        # operating count. With ~9 sources for quick depth, the disciplined
+        # path is roughly: 3 search calls + 9 extractor calls + a final
+        # synthesis = 13. Capping at 12 forces the agent to consolidate
+        # rather than enter a "let me re-check that source" doom loop —
+        # which was a contributing factor in the v1 600k-token regression
+        # (CrewAI's default `max_iter=25` allowed too many redundant
+        # think-act cycles, each one re-prompting with the full conversation
+        # history including all prior tool observations).
         return Agent(
             config=self.agents_config["searcher"],
             tools=[SerperDevTool(), CleanArticleExtractor()],
+            max_iter=12,
         )
 
     @agent

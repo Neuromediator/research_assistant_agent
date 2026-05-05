@@ -42,6 +42,16 @@ DEFAULT_USER_AGENT = (
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_CACHE_PATH = Path(".cache/articles.db")
 
+# Hard cap on the article body returned to the LLM (NOT cached size — see
+# `_run`'s caching order). Most factual claims sit in the lede / first
+# section of an article; 6000 chars (~1500 tokens) gives enough lookahead
+# to find a Finding.excerpt of ≤800 chars while keeping the searcher's
+# ReAct conversation history bounded. This is the SPEC §2.3 "full body
+# stays out of LLM prompts" contract — a v1 600k-prompt-token regression
+# was traced directly to the absence of this cap. Tune carefully: doubling
+# this roughly doubles the searcher's input cost.
+MAX_BODY_CHARS_FOR_LLM = 6000
+
 
 class ArticleExtractorInput(BaseModel):
     """Input schema for the article extractor tool.
@@ -103,7 +113,10 @@ class CleanArticleExtractor(BaseTool):
 
         cached = self._cache_get(url)
         if cached is not None:
-            return cached
+            # Cache stores the FULL payload; we truncate at return-time so
+            # raising MAX_BODY_CHARS_FOR_LLM later doesn't require
+            # re-fetching. See module-level constant for rationale.
+            return _truncate_for_llm(cached)
 
         try:
             response = requests.get(
@@ -140,4 +153,32 @@ class CleanArticleExtractor(BaseTool):
         payload = "\n".join(header_lines) + "\n\n---\n\n" + body.strip()
 
         self._cache_put(url, payload)
+        return _truncate_for_llm(payload)
+
+
+def _truncate_for_llm(payload: str) -> str:
+    """Cap the article-body portion of the payload at MAX_BODY_CHARS_FOR_LLM.
+
+    Operates only on the body (the part after the `---` separator); the
+    metadata header is always preserved in full so the agent still gets
+    Title/URL/etc. If the body is short enough, returns unchanged.
+    """
+    separator = "\n\n---\n\n"
+    parts = payload.split(separator, 1)
+    if len(parts) != 2:
+        # Defensive: every successful payload is built with the separator
+        # above. If it's missing, treat the whole thing as body.
+        body = payload
+        header = ""
+    else:
+        header, body = parts
+    if len(body) <= MAX_BODY_CHARS_FOR_LLM:
         return payload
+    truncated = body[:MAX_BODY_CHARS_FOR_LLM].rstrip()
+    note = (
+        f"\n\n[...truncated for LLM context budget; original body was "
+        f"{len(body)} chars. The visible portion above is the article's "
+        f"opening — usually enough to extract a Finding.excerpt. "
+        f"Do not re-fetch this URL hoping for more.]"
+    )
+    return (header + separator if header else "") + truncated + note

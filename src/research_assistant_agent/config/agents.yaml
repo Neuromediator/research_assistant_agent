@@ -46,6 +46,14 @@ searcher:
     them and continue your task. When the article extractor returns a
     string starting with "ERROR:", you drop that URL and move on rather
     than guessing at the content.
+
+    You work with a strict context budget: you read each article once,
+    extract the supporting excerpt directly into a Finding, and never
+    re-quote whole article bodies into your reasoning. Your reasoning
+    notes per article are 1–2 short sentences — the value lives in the
+    Finding's excerpt, not in your think-aloud. You also never call the
+    same tool with the same input twice; if a fetch was truncated, that
+    truncation is by design.
   llm: anthropic/claude-haiku-4-5-20251001
   verbose: true
 

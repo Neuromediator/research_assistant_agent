@@ -2202,6 +2202,66 @@ wheels = [
 ]
 
 [[package]]
+name = "openinference-instrumentation"
+version = "0.1.48"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f9/6b/2f5bf4bb23f96f62d774af3edd2437de99fa70639eb755e4692d922a67f3/openinference_instrumentation-0.1.48.tar.gz", hash = "sha256:7682bf713a653f02e4d7c3cd3087482fa543f69d1f610418fae6f346327d25b0", size = 23936, upload-time = "2026-04-29T00:34:06.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/9f/e6fd710e214e85181077e21ee593c92f274ff3cddf5b32866c903c156003/openinference_instrumentation-0.1.48-py3-none-any.whl", hash = "sha256:aea9ca69abf11fb5a19195a16be81e2d2ca1f3a90b73b8f67df3006665f5d2b2", size = 30121, upload-time = "2026-04-29T00:34:05.318Z" },
+]
+
+[[package]]
+name = "openinference-instrumentation-anthropic"
+version = "0.1.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openinference-instrumentation" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/62/40a4ae94a7a3e46a50f2d277b9e0d7de7ded77256c104bc1c23501852228/openinference_instrumentation_anthropic-0.1.20.tar.gz", hash = "sha256:d5339dffb100ad32bb7de9948386574e73af5ffdbcab4a4ebfa3d55c22256096", size = 14265, upload-time = "2025-10-10T03:48:53.491Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/97/5987b3e0491eb850a090cd5c82abc049fd5805ca0d43469a712ec352edbd/openinference_instrumentation_anthropic-0.1.20-py3-none-any.whl", hash = "sha256:f6dba468d7ae13296bbe221cd6968f98bc4760f62c45080e2de434ca6adc0a54", size = 17391, upload-time = "2025-10-10T03:48:51.137Z" },
+]
+
+[[package]]
+name = "openinference-instrumentation-crewai"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openinference-instrumentation" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/9c/452e2cabec0718d77ab933ae6f94d768aa1058b91e71f4b5603aea5558e4/openinference_instrumentation_crewai-1.1.4.tar.gz", hash = "sha256:0dde335c4e19aa3823747de814423edf4b1dd6f8a22b5c86695e3676ed805290", size = 25902, upload-time = "2026-05-04T05:51:31.22Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/68/ed02ba7654397996c46c67802fb2458dacf0d4239f00e2afcf98ac7c0ca8/openinference_instrumentation_crewai-1.1.4-py3-none-any.whl", hash = "sha256:401c1336ce3fe0ed4a63726bc754c1a867b06b36c54b7729672a8605f32fb183", size = 28735, upload-time = "2026-05-04T05:51:29.83Z" },
+]
+
+[[package]]
+name = "openinference-semantic-conventions"
+version = "0.1.29"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/6b/9ed67f9ce8c92436b297207abde730800b00bdec7e114f71b8dfe91cd26b/openinference_semantic_conventions-0.1.29.tar.gz", hash = "sha256:bbeb6472777a45a574169894bb9c4d80c6832a8befd32ab238cb875438ce1044", size = 12959, upload-time = "2026-04-22T00:39:27.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/7b/45ad1b95315b5563baa7338c8e8088bb1af66905c46e1bd1fe6ecbe30ea8/openinference_semantic_conventions-0.1.29-py3-none-any.whl", hash = "sha256:f45e0b1cf79fe407af4722bcf391a01565f0878c95be3ebcc9382245d0367cc5", size = 10582, upload-time = "2026-04-22T00:39:27.066Z" },
+]
+
+[[package]]
 name = "openpyxl"
 version = "3.1.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2272,6 +2332,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/8f/954bc725961cbe425a749d55c0ba1df46832a5999eae764d1a7349ac1c29/opentelemetry_exporter_otlp_proto_http-1.34.1.tar.gz", hash = "sha256:aaac36fdce46a8191e604dcf632e1f9380c7d5b356b27b3e0edb5610d9be28ad", size = 15351, upload-time = "2025-06-10T08:55:24.657Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/79/54/b05251c04e30c1ac70cf4a7c5653c085dfcf2c8b98af71661d6a252adc39/opentelemetry_exporter_otlp_proto_http-1.34.1-py3-none-any.whl", hash = "sha256:5251f00ca85872ce50d871f6d3cc89fe203b94c3c14c964bbdc3883366c705d8", size = 17744, upload-time = "2025-06-10T08:55:03.802Z" },
+]
+
+[[package]]
+name = "opentelemetry-instrumentation"
+version = "0.55b1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "packaging" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cb/69/d8995f229ddf4d98b9c85dd126aeca03dd1742f6dc5d3bc0d2f6dae1535c/opentelemetry_instrumentation-0.55b1.tar.gz", hash = "sha256:2dc50aa207b9bfa16f70a1a0571e011e737a9917408934675b89ef4d5718c87b", size = 28552, upload-time = "2025-06-10T08:58:15.312Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/7d/8ddfda1506c2fcca137924d5688ccabffa1aed9ec0955b7d0772de02cec3/opentelemetry_instrumentation-0.55b1-py3-none-any.whl", hash = "sha256:cbb1496b42bc394e01bc63701b10e69094e8564e281de063e4328d122cc7a97e", size = 31108, upload-time = "2025-06-10T08:57:14.355Z" },
 ]
 
 [[package]]
@@ -3428,6 +3503,8 @@ dependencies = [
     { name = "crewai", extra = ["anthropic", "tools"] },
     { name = "gradio" },
     { name = "langfuse" },
+    { name = "openinference-instrumentation-anthropic" },
+    { name = "openinference-instrumentation-crewai" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "trafilatura" },
@@ -3443,7 +3520,9 @@ dev = [
 requires-dist = [
     { name = "crewai", extras = ["tools", "anthropic"], specifier = "==1.14.4" },
     { name = "gradio", specifier = ">=5.0" },
-    { name = "langfuse", specifier = ">=2.0" },
+    { name = "langfuse", specifier = ">=3.0" },
+    { name = "openinference-instrumentation-anthropic", specifier = ">=0.1,<1.0" },
+    { name = "openinference-instrumentation-crewai", specifier = ">=0.1" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "requests", specifier = ">=2.32" },
     { name = "trafilatura", specifier = ">=2.0" },

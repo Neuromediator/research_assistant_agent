@@ -35,6 +35,7 @@ shape that cooperates with Gradio's progress + cancel primitives.
 from __future__ import annotations
 
 import re
+import sys
 import unicodedata
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -60,6 +61,7 @@ from research_assistant_agent.models import (
     ResearchInput,
     Subtopics,
 )
+from research_assistant_agent.observability import format_token_summary, research_trace
 
 OUTPUTS_DIR = Path("outputs")
 DEPTH_CHOICES: list[Depth] = ["quick", "standard", "deep"]
@@ -153,93 +155,112 @@ def run_research(
 
     factory = ResearchAssistantAgent()
     profile = DEPTH_PROFILE[request.depth]
+    # Per-request token accumulator. Mirrors `ResearchFlow._token_usages` —
+    # the UI rebuilds the Flow's stage graph by hand, so it also rebuilds
+    # this telemetry path by hand. Logged once at the end of the run.
+    token_usages: list[object] = []
 
-    # Stage 1 — plan. Initial yield clears any previous report from a prior
-    # run so users don't see stale content while the new one is in flight.
-    msg = "⏳ Planning subtopics…"
-    progress(0.05, desc=msg)
-    yield msg, "", gr.update(visible=False)
-
-    plan_result = factory.planning_crew().kickoff(
-        inputs={
-            "topic": request.topic,
-            "depth": request.depth,
-            "subtopic_count": profile["subtopic_count"],
-        }
-    )
-    subtopics = expect_pydantic(plan_result.pydantic, Subtopics, plan_result.raw)
-
-    # Stage 2 — initial search.
-    msg = f"🔎 Searching the web for {len(subtopics.items)} subtopics… (~30-60s)"
-    progress(0.25, desc=msg)
-    yield msg, "", gr.update(visible=False)
-
-    search_result = factory.search_crew().kickoff(
-        inputs={
-            "search_brief": format_initial_brief(subtopics),
-            "sources_per_subtopic": profile["sources_per_subtopic"],
-            "total_sources_min": profile["total_min"],
-            "total_sources_max": profile["total_max"],
-        }
-    )
-    findings = expect_pydantic(search_result.pydantic, Findings, search_result.raw)
-
-    # Stage 3 — critique.
-    msg = f"🧐 Reviewing {len(findings.items)} findings for grounding…"
-    progress(0.55, desc=msg)
-    yield msg, "", gr.update(visible=False)
-
-    critique_result = factory.critique_crew().kickoff(
-        inputs={
-            "topic": request.topic,
-            "subtopics_json": subtopics.model_dump_json(),
-            "findings_json": findings.model_dump_json(),
-        }
-    )
-    critique = expect_pydantic(critique_result.pydantic, CritiqueResult, critique_result.raw)
-
-    # Stage 3b — bounded retry. Same MAX_RETRIES contract as flow.py: once.
-    if not critique.ok and MAX_RETRIES > 0:
-        msg = (
-            f"♻️ Critic flagged {len(critique.missing_claims)} gaps; "
-            "re-searching for additional sources…"
-        )
-        progress(0.7, desc=msg)
+    # `research_trace` opens ONE root Langfuse span around the whole run so
+    # every stage / Crew / tool / LLM call lands in a single trace with
+    # aggregate cost. The `with` block stays open across `yield` calls
+    # because Python keeps the generator's frame (and its with-stack) alive
+    # until the generator is exhausted — so OTel context propagation
+    # survives Gradio's progress yields. No-op if observability is off.
+    with research_trace(topic=request.topic, depth=request.depth):
+        # Stage 1 — plan. Initial yield clears any previous report from a prior
+        # run so users don't see stale content while the new one is in flight.
+        msg = "⏳ Planning subtopics…"
+        progress(0.05, desc=msg)
         yield msg, "", gr.update(visible=False)
 
-        retry_result = factory.search_crew().kickoff(
+        plan_result = factory.planning_crew().kickoff(
             inputs={
-                "search_brief": format_retry_brief(critique),
+                "topic": request.topic,
+                "depth": request.depth,
+                "subtopic_count": profile["subtopic_count"],
+            }
+        )
+        token_usages.append(plan_result.token_usage)
+        subtopics = expect_pydantic(plan_result.pydantic, Subtopics, plan_result.raw)
+
+        # Stage 2 — initial search.
+        msg = f"🔎 Searching the web for {len(subtopics.items)} subtopics… (~30-60s)"
+        progress(0.25, desc=msg)
+        yield msg, "", gr.update(visible=False)
+
+        search_result = factory.search_crew().kickoff(
+            inputs={
+                "search_brief": format_initial_brief(subtopics),
                 "sources_per_subtopic": profile["sources_per_subtopic"],
                 "total_sources_min": profile["total_min"],
                 "total_sources_max": profile["total_max"],
             }
         )
-        retry_findings = expect_pydantic(retry_result.pydantic, Findings, retry_result.raw)
-        # Append, don't replace — original findings are still valid evidence.
-        findings = Findings(items=[*findings.items, *retry_findings.items])
+        token_usages.append(search_result.token_usage)
+        findings = expect_pydantic(search_result.pydantic, Findings, search_result.raw)
 
-    # Stage 4 — write.
-    msg = f"✍️ Writing the report from {len(findings.items)} findings…"
-    progress(0.9, desc=msg)
-    yield msg, "", gr.update(visible=False)
+        # Stage 3 — critique.
+        msg = f"🧐 Reviewing {len(findings.items)} findings for grounding…"
+        progress(0.55, desc=msg)
+        yield msg, "", gr.update(visible=False)
 
-    writer_result = factory.writing_crew().kickoff(
-        inputs={
-            "topic": request.topic,
-            "depth": request.depth,
-            "findings_json": findings.model_dump_json(),
-            "today": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        }
-    )
-    report = expect_pydantic(writer_result.pydantic, Report, writer_result.raw)
+        critique_result = factory.critique_crew().kickoff(
+            inputs={
+                "topic": request.topic,
+                "subtopics_json": subtopics.model_dump_json(),
+                "findings_json": findings.model_dump_json(),
+            }
+        )
+        token_usages.append(critique_result.token_usage)
+        critique = expect_pydantic(critique_result.pydantic, CritiqueResult, critique_result.raw)
 
-    # Persist to disk and surface the download.
-    progress(1.0, desc="Done — saving report to disk…")
-    saved = _save_report_to_disk(report.markdown, request.topic)
-    # Empty status on the final yield — the report itself is now visible, and
-    # a stale "writing…" line beside a finished report would be misleading.
-    yield "✅ Done.", report.markdown, gr.update(value=str(saved), visible=True)
+        # Stage 3b — bounded retry. Same MAX_RETRIES contract as flow.py: once.
+        if not critique.ok and MAX_RETRIES > 0:
+            msg = (
+                f"♻️ Critic flagged {len(critique.missing_claims)} gaps; "
+                "re-searching for additional sources…"
+            )
+            progress(0.7, desc=msg)
+            yield msg, "", gr.update(visible=False)
+
+            retry_result = factory.search_crew().kickoff(
+                inputs={
+                    "search_brief": format_retry_brief(critique),
+                    "sources_per_subtopic": profile["sources_per_subtopic"],
+                    "total_sources_min": profile["total_min"],
+                    "total_sources_max": profile["total_max"],
+                }
+            )
+            token_usages.append(retry_result.token_usage)
+            retry_findings = expect_pydantic(retry_result.pydantic, Findings, retry_result.raw)
+            # Append, don't replace — original findings are still valid evidence.
+            findings = Findings(items=[*findings.items, *retry_findings.items])
+
+        # Stage 4 — write.
+        msg = f"✍️ Writing the report from {len(findings.items)} findings…"
+        progress(0.9, desc=msg)
+        yield msg, "", gr.update(visible=False)
+
+        writer_result = factory.writing_crew().kickoff(
+            inputs={
+                "topic": request.topic,
+                "depth": request.depth,
+                "findings_json": findings.model_dump_json(),
+                "today": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            }
+        )
+        token_usages.append(writer_result.token_usage)
+        report = expect_pydantic(writer_result.pydantic, Report, writer_result.raw)
+
+        # Persist to disk and surface the download.
+        progress(1.0, desc="Done — saving report to disk…")
+        saved = _save_report_to_disk(report.markdown, request.topic)
+        # Per-run cost summary (SPEC §10). Goes to stderr / Spaces logs — never
+        # to the user-visible status line, since it's an operator concern.
+        print(f"[run summary] {format_token_summary(token_usages)}", file=sys.stderr)
+        # Empty status on the final yield — the report itself is now visible, and
+        # a stale "writing…" line beside a finished report would be misleading.
+        yield "✅ Done.", report.markdown, gr.update(value=str(saved), visible=True)
 
 
 # ---- Blocks ------------------------------------------------------------
