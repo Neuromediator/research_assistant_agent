@@ -24,7 +24,7 @@ A web research agent that turns a topic + depth into a markdown report with **in
 
 ![CI](https://github.com/Neuromediator/research_assistant_agent/actions/workflows/ci.yml/badge.svg)
 
-> **Live demo:** *(link goes here once the HF Space is live — see [§ Deploying](#deploying-to-hugging-face-spaces))*
+> **Live demo:** [huggingface.co/spaces/Neuromediator/research-assistant-agent](https://huggingface.co/spaces/Neuromediator/research-assistant-agent)
 
 ---
 
