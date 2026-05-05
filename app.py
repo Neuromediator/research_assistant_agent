@@ -4,10 +4,25 @@ HF Spaces convention: a file named `app.py` at the repo root is auto-detected
 and run with `python app.py`. We keep this file deliberately thin — the actual
 Gradio Blocks live in `src/research_assistant_agent/ui.py` so they're testable
 and importable without going through the Spaces launch path.
+
+WHY the sys.path insertion below: locally, `uv sync` installs this project as
+an editable package (per `pyproject.toml`), so `research_assistant_agent` is
+importable from anywhere. On HF Spaces only `requirements.txt` is processed —
+the project itself is NOT pip-installed (the deploy workflow uses
+`uv export --no-emit-project` to keep it out of requirements.txt; HF's build
+runs `pip install` before the source tree is copied to /app, so installing
+the project there would fail anyway). Putting `src/` on the path here lets
+`from research_assistant_agent.X import Y` resolve without an install. The
+local layout is unaffected because uv's editable install takes precedence.
 """
 
-import gradio as gr
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+import gradio as gr  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 # Load `.env` BEFORE importing `ui` (which transitively imports `crew.py`,
 # which instantiates `SerperDevTool` — the tool reads `SERPER_API_KEY` from

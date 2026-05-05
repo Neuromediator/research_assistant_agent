@@ -54,8 +54,19 @@ jobs:
       # `pyproject.toml`. We generate it from the locked `uv.lock` so the
       # Space gets exactly the same versions CI tested with — no surprise
       # version drift between local / CI / production.
+      #
+      # `--no-emit-project` is critical: by default `uv export` includes
+      # the current workspace project itself as a `file://` dependency,
+      # which makes `pip install -r requirements.txt` try to install
+      # `/app` as a Python package. On HF Spaces that fails because the
+      # build runs `pip install` BEFORE copying the project tree into
+      # `/app`, so pyproject.toml is missing at install time. Excluding
+      # the project here is correct: HF doesn't need to "install" our
+      # source — it just needs the third-party deps; our `src/` is then
+      # importable directly because `app.py` adds it to sys.path via the
+      # Python import system (HF runs `python app.py` with cwd=/app).
       - name: Generate requirements.txt from uv.lock
-        run: uv export --no-dev --no-hashes --format requirements-txt > requirements.txt
+        run: uv export --no-dev --no-hashes --no-emit-project --format requirements-txt > requirements.txt
 
       - name: Configure git for HF push
         run: |
