@@ -1,6 +1,7 @@
 .env
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/skills/
 
 # Internal-only docs — kept locally for development context but not
 # shipped to GitHub / HF Spaces.
