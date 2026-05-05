@@ -8,7 +8,28 @@ dependencies = [
     "crewai[tools,anthropic]==1.14.4",
     "trafilatura>=2.0",
     "gradio>=5.0",
-    "langfuse>=2.0",
+    "langfuse>=3.0",
+    "openinference-instrumentation-crewai>=0.1",
+    # Anthropic SDK instrumentation. CrewAI 1.14.4 with the [anthropic]
+    # extra goes through its native AnthropicCompletion (not LiteLLM),
+    # which calls the official `anthropic` Python SDK. Without this
+    # wrapper, LLM invocations don't appear as `generation`-typed spans
+    # and Langfuse can't extract model / tokens / cost.
+    #
+    # Pinned <1.0 because 1.x expects `Messages.parse` from a newer
+    # anthropic SDK than CrewAI 1.14.4 pins (anthropic==0.73.x). The
+    # `opentelemetry-instrumentation-anthropic` package was rejected for
+    # the same reason — its current versions pull a newer `opentelemetry-
+    # api` than CrewAI's pin.
+    #
+    # KNOWN GAP: this catches CrewAI's plain-completion path
+    # (planner/critic/writer via `messages.create`) but NOT the tool-use
+    # path (`beta.messages.create`) the searcher takes. The searcher's
+    # LLM spans are therefore absent from traces — its cost is visible
+    # only in CrewOutput.token_usage aggregates printed at run end.
+    # Replacing this with a beta-aware wrapper is a v2 polish item; it
+    # does not block deploy.
+    "openinference-instrumentation-anthropic>=0.1,<1.0",
     "python-dotenv>=1.0",
     "requests>=2.32",
 ]

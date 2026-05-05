@@ -79,6 +79,8 @@ START
 
 **Custom: `CleanArticleExtractor`**
 
+> **Contract — full body stays out of LLM prompts.** The extractor's clean text is large by design (a long-form article can be 30–80k characters / 10–25k tokens). It must be cached and excerpted, never passed verbatim to an LLM. The searcher reasons over `Finding.excerpt` (capped per `models.py`), and the agents.yaml prompts must explicitly forbid quoting the body wholesale into reasoning. Violating this is what produced the v1 600k-prompt-token regression — see §6.
+
 - Input: URL
 - Output: clean main-article markdown text + metadata (title, byline, published date if available)
 - Backed by [`trafilatura`](https://trafilatura.readthedocs.io/) for main-content extraction (strips nav, ads, comments)
@@ -213,13 +215,18 @@ class Report(BaseModel):
 
 | Mode                              | Handling                                                                             |
 | --------------------------------- | ------------------------------------------------------------------------------------ |
+| **Stage exceeds 2× §9 token budget** | **Treat as a regression, not a runtime error.** The fix is in prompts/contracts (e.g. searcher passing full article bodies instead of excerpts), not retries. Diagnose via Langfuse trace before touching anything else. |
 | Serper returns 0 results          | Searcher reports `no_sources`; writer produces a "Could not find sources on X" stub  |
 | Article fetch fails (timeout/404) | Drop the URL, continue with remaining; if <2 succeed, mark subtopic incomplete       |
 | Critic loops forever              | Hard cap: retry budget = 1. After retry, writer composes whatever exists.            |
 | Anthropic rate limit              | Exponential backoff (built into anthropic SDK); fail fast after 3 retries            |
-| Anthropic spend runaway           | Hard cap set in console.anthropic.com (recommend $20/mo while learning)              |
+| Anthropic spend runaway           | Hard cap set in console.anthropic.com (recommend $20/mo while learning) — **must be configured before any public deploy.** |
 | Prompt injection from web pages   | Article extractor strips HTML; agents told to treat fetched content as data, not instructions |
 | Empty / abusive input             | Gradio input validation: 1 ≤ len(topic) ≤ 500, depth must be enum value             |
+
+### Known regressions / open issues
+
+- **v1 600k prompt-token regression on `quick`** — observed during step 12 sanity run: a `quick`-depth run consumed ~618k prompt tokens against §9's 6k estimate (≈100×). Root cause hypothesis: the searcher feeds full extracted article bodies into LLM context across multiple agent steps. Fix lives in `tasks.yaml` / `agents.yaml` — searcher must work from `Finding.excerpt` only. **Tracked as build-sequence step 14 below; must be resolved before HF deploy.**
 
 ---
 
@@ -263,7 +270,9 @@ class Report(BaseModel):
 
 ---
 
-## 9. Cost & latency budget
+## 9. Cost & latency contract
+
+> **This is a contract, not an estimate.** A run that exceeds **2×** any of the totals below is a regression — diagnose via Langfuse trace before merging or deploying. CI does not enforce this (no real APIs in CI by §7), so the discipline lives in code review and build-sequence step 14.
 
 Per query (standard depth, no retry):
 
@@ -287,8 +296,15 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 ## 10. Observability
 
 - **CrewAI `verbose=True`** — agent thoughts and tool calls printed to stdout (HF Spaces logs). **Active.**
-- **Langfuse free tier (v4.x)** — distributed tracing UI; one span per agent run, nested tool calls, token + cost tracking. Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`). Langfuse v3+ moved from a manual-span SDK to OpenTelemetry-based instrumentation (`@observe` decorator + OTel exporter); when consulting docs, ignore v2 examples. **Status: deferred — declared as a dependency in `pyproject.toml` but not yet wired in. See §13 step 12.**
-- **Per-run cost summary** — printed at end of each run (sum across agents, from CrewAI's usage_metrics). **Deferred (paired with Langfuse step).**
+- **Langfuse free tier (v3+)** — distributed tracing UI; auto-traced via three OpenTelemetry-aware instrumentors:
+    - `openinference-instrumentation-crewai` — Crew / Agent / Task / Tool spans (structural picture).
+    - `openinference-instrumentation-anthropic` (pinned `<1.0` to match CrewAI 1.14.4's `anthropic==0.73.x` pin) — wraps `anthropic.Anthropic.messages.create`, capturing the planner / critic / writer LLM calls as `generation`-typed spans (model + tokens + cost).
+    - A root `research_trace` context manager opened around each `flow.kickoff()` so every nested span lands in **one** trace per request, with `topic` / `depth` on the root.
+
+  The Flow stage methods (`plan`, `search`, `critique`, `retry_search`, `write`) also carry an `@observe` decorator + an explicit `log_stage(input_=…, output=…)` call so each appears as a labelled parent span with readable Input / Output (not `{}`). Initialized via env vars (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`); region defaults to `https://cloud.langfuse.com` (EU). Bootstrap lives in `observability.py` and is called once per process from `main.py` and `app.py`; absent keys disable tracing silently. **Active.**
+
+  **Known gap (v2 polish, not blocking deploy):** the searcher uses `client.beta.messages.create` (the Anthropic beta tool-use endpoint) when reasoning over its Serper + CleanArticleExtractor tools. OpenInference's anthropic instrumentor 0.1.x does NOT wrap the beta endpoint, so the searcher's Haiku LLM calls never appear as `generation` spans in Langfuse — its tool calls are visible, but per-step token / cost detail is missing. Aggregate searcher cost is still captured: `CrewOutput.token_usage` is summed in stdout's `[run summary]` line at end of run. Fix path: write a beta-aware wrapper, or wait for a newer instrumentor compatible with CrewAI's pinned anthropic SDK.
+- **Per-run cost summary** — printed to stderr at the end of each run, aggregated from `CrewOutput.token_usage` across all stages (planner/searcher/critic/[retry]/writer). Visible in the same terminal as the report; complements Langfuse's per-trace cost view. **Active.**
 
 ---
 
@@ -314,20 +330,26 @@ Anthropic console hard cap: **$20/mo** recommended while learning.
 
 ## 13. Build sequence (order I'll implement)
 
-1. Clean up template (remove demo `topic="AI LLMs"`, knowledge folder, default agents/tasks)
-2. Update `pyproject.toml` (add `gradio`, `trafilatura`, `langfuse`, `pytest`, `ruff`)
-3. Build the `CleanArticleExtractor` tool + its unit tests (proves the foundations)
-4. Define Pydantic models in `models.py`
-5. Wire 4 agents in `agents.yaml`, 4 tasks in `tasks.yaml`, factory in `crew.py`
-6. Wire the Flow with verifier loop in `flow.py`
-7. Build Gradio UI in `ui.py` + root `app.py`
-8. Integration test with mocks
-9. Local end-to-end sanity run
-10. Set up `.github/workflows/ci.yml`
-11. Push to GitHub
-12. Wire Langfuse tracing (`@observe` on the Flow + per-stage spans; verify a trace lands in cloud.langfuse.com on a local run before pushing). Deferred behind GitHub push so the repo can ship without observability if Langfuse onboarding stalls.
-13. Create HF Space, set up Secrets (Anthropic, Serper, Langfuse), set up `deploy.yml`
-14. Push to `main` → live demo
+Steps 1–12 are complete. Steps 13+ reflect the post-§9-regression priority reset: **fix tracing & cost before public deploy**.
+
+1. ✅ Clean up template (remove demo `topic="AI LLMs"`, knowledge folder, default agents/tasks)
+2. ✅ Update `pyproject.toml` (add `gradio`, `trafilatura`, `langfuse`, `pytest`, `ruff`)
+3. ✅ Build the `CleanArticleExtractor` tool + its unit tests (proves the foundations)
+4. ✅ Define Pydantic models in `models.py`
+5. ✅ Wire 4 agents in `agents.yaml`, 4 tasks in `tasks.yaml`, factory in `crew.py`
+6. ✅ Wire the Flow with verifier loop in `flow.py`
+7. ✅ Build Gradio UI in `ui.py` + root `app.py`
+8. ✅ Integration test with mocks
+9. ✅ Local end-to-end sanity run
+10. ✅ Set up `.github/workflows/ci.yml`
+11. ✅ Push to GitHub
+12. ✅ Wire Langfuse tracing (OpenInference CrewAI instrumentor + `@observe` on Flow stages + `research_trace` root wrapper). One trace per request lands in cloud.langfuse.com; bootstrap centralized in `observability.py`; safe to clone without Langfuse credentials.
+13. **Make tracing actionable.** Capture explicit `input` / `output` on each Flow stage's `@observe` (so a stage span isn't `{}`); add Anthropic Sonnet 4.6 + Haiku 4.5 to Project Settings → Models in Langfuse so cost rolls up to the trace root. Verify on a fresh quick run: trace root shows non-zero `Total cost`, and clicking `flow.search` shows readable input/output.
+14. **Token-budget audit & fix.** Use the now-actionable trace from step 13 to find which stage burned the ~600k prompt tokens observed during step 12. Fix at the contract layer (`tasks.yaml` and/or `agents.yaml`): searcher reasons over `Finding.excerpt`, not raw article bodies; critic / writer get the same excerpt-only contract. Re-run quick + standard; both must land within 2× of §9 budgets before continuing.
+15. **README.md** — short, complete: what the project does, how to run locally (`uv sync` + `uv run run_crew "<topic>" quick` + `uv run python app.py`), architecture diagram or short prose pointing at SPEC for depth, env-var checklist (`.env.example`), CI badge. Stranger-readable in 10 minutes.
+16. **Anthropic spend cap** — set in console.anthropic.com (`$20/mo` while learning). Confirmed before step 17.
+17. **Create HF Space**, add Space Secrets (`ANTHROPIC_API_KEY`, `SERPER_API_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`), write `.github/workflows/deploy.yml`. Generate `requirements.txt` from `pyproject.toml` either in CI or as a committed file.
+18. **Push to `main` → live demo.** Final verification: open the public Space, run a query, confirm the trace appears in Langfuse with cost and the report cites real fetched URLs.
 
 ---
 

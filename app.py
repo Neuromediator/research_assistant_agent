@@ -15,6 +15,14 @@ from dotenv import load_dotenv
 # no `.env` file; secrets arrive as real env vars and this is a no-op.
 load_dotenv()
 
+# Wire Langfuse + CrewAI tracing once per process. Must come AFTER load_dotenv
+# (so the keys are visible) and BEFORE importing `ui` (which pulls in the
+# Crew factories — instrumenting after they exist is fine, but doing it here
+# keeps the order obvious).
+from research_assistant_agent.observability import setup_observability  # noqa: E402
+
+setup_observability()
+
 from research_assistant_agent.ui import demo  # noqa: E402
 
 if __name__ == "__main__":

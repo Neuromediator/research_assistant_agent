@@ -18,11 +18,20 @@ from dotenv import load_dotenv
 
 from research_assistant_agent.flow import ResearchFlow
 from research_assistant_agent.models import Depth, ResearchInput
+from research_assistant_agent.observability import (
+    format_token_summary,
+    research_trace,
+    setup_observability,
+)
 
-# Load .env so ANTHROPIC_API_KEY / SERPER_API_KEY are visible to the SDKs
-# before we instantiate the Flow. On HF Spaces there is no `.env` file —
-# secrets arrive as real env vars — so this call is a no-op there.
+# Load .env so ANTHROPIC_API_KEY / SERPER_API_KEY / LANGFUSE_* are visible
+# to the SDKs before we instantiate the Flow. On HF Spaces there is no
+# `.env` file — secrets arrive as real env vars — so this call is a no-op
+# there.
 load_dotenv()
+# Wire up Langfuse + CrewAI auto-instrumentation once per process. Idempotent;
+# silently disables itself when the LANGFUSE_* keys are absent.
+setup_observability()
 
 
 def run() -> None:
@@ -35,8 +44,15 @@ def run() -> None:
 
     request = ResearchInput(topic=topic, depth=cast(Depth, depth_arg))
     flow = ResearchFlow()
-    flow.kickoff(inputs=request.model_dump())
+    # `research_trace` opens a single root Langfuse span around the whole
+    # kickoff so every nested stage / Crew / tool / LLM call lands in ONE
+    # trace with aggregate cost. No-op if Langfuse is disabled.
+    with research_trace(topic=request.topic, depth=request.depth):
+        flow.kickoff(inputs=request.model_dump())
 
     if flow.state.report is None:
         raise SystemExit("Flow finished without producing a report — check logs.")
     print(flow.state.report.markdown)
+    # Per-run cost summary (SPEC §10). Goes to stderr so piping the report
+    # into a file leaves the markdown clean.
+    print(f"\n[run summary] {format_token_summary(flow._token_usages)}", file=sys.stderr)
