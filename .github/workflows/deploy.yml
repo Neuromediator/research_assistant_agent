@@ -1,0 +1,81 @@
+name: Deploy to HF Spaces
+
+# WHY this exists: HF Spaces builds from a Space-side git repo, not from
+# GitHub directly. So merging to `main` here only updates GitHub — to land
+# on the Space we have to push the same tree to huggingface.co's git
+# remote. This workflow does that automatically, so the public Space and
+# `main` never drift.
+#
+# WHY only on `push` to `main` (not on PRs): a PR push would deploy from
+# an unreviewed branch. CI (ci.yml) runs on PRs and is what gates merging.
+# By the time something lands on `main` it has already passed CI.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   HF_TOKEN        — a HuggingFace access token with `write` scope on the
+#                     target Space (https://huggingface.co/settings/tokens)
+#   HF_USERNAME     — the HF username or org owning the Space
+#   HF_SPACE_NAME   — the Space's name (without the owner prefix)
+#
+# Required HF Space Secrets (Space → Settings → Repository secrets):
+#   ANTHROPIC_API_KEY, SERPER_API_KEY, and optionally LANGFUSE_PUBLIC_KEY,
+#   LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL. Without these the Space will
+#   start but every run will fail at the first LLM/Serper call.
+
+on:
+  push:
+    branches: [main]
+
+# Only one deploy can run at a time per branch — serializes pushes to HF
+# so a fast double-merge can't race two `git push` operations against the
+# same Space remote.
+concurrency:
+  group: deploy-hf-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Full history so the force-push to HF includes everything HF
+          # already has plus our latest commits without divergence.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      # HF Spaces installs Python deps from `requirements.txt`, not from
+      # `pyproject.toml`. We generate it from the locked `uv.lock` so the
+      # Space gets exactly the same versions CI tested with — no surprise
+      # version drift between local / CI / production.
+      - name: Generate requirements.txt from uv.lock
+        run: uv export --no-dev --no-hashes --format requirements-txt > requirements.txt
+
+      - name: Configure git for HF push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Stage and commit `requirements.txt` ON TOP of the merged commit.
+      # This commit lives only in the HF push history, not in `main` on
+      # GitHub — keeping the GitHub repo free of generated artifacts.
+      - name: Add requirements.txt to deploy commit
+        run: |
+          git add requirements.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: generated requirements.txt for HF Spaces"
+          fi
+
+      - name: Push to HuggingFace Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        run: |
+          git push --force "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE_NAME}" HEAD:main
