@@ -80,7 +80,7 @@ jobs:
         run: |
           git add requirements.txt
           if ! git diff --cached --quiet; then
-            git commit -m "ci: generated requirements.txt for HF Spaces"
+            git commit -m "Add generated requirements.txt for HF Spaces"
           fi
 
       - name: Push to HuggingFace Space
